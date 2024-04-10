@@ -32,7 +32,8 @@ def handle_dialog(res, req):
         res['response']['text'] = 'Привет! Назови свое имя и кодовое слово!'
         sessionStorage[user_id] = {
             'first_name': None,
-            'key_word': None
+            'key_word': None,
+            'game_started': False
         }
         return
 
@@ -57,6 +58,44 @@ def handle_dialog(res, req):
                 'text'] = 'Приятно познакомиться, ' \
                           + first_name.title() \
                           + '. Хочешь сыграть в игру "Угадай географический объект"?'
+
+            res['response']['buttons'] = [
+                {
+                    'title': 'да',
+                    'hide': True
+                },
+                {
+                    'title': 'нет',
+                    'hide': True
+                }
+            ]
+    else:
+        if not sessionStorage[user_id]['game_started']:
+            if 'да' in req['request']['nlu']['tokens']:
+                sessionStorage[user_id]['game_started'] = True
+                res['response']['text'] = 'Хорошо, угадай первый город'
+                game(res, req)
+            elif 'нет' in req['request']['nlu']['tokens']:
+                res['response']['text'] = 'Хорошо, увидимся позже'
+                res['end_session'] = True
+            else:
+                res['response']['text'] = 'Я не поняла.Будем играть?'
+                res['response']['buttons'] = [
+                    {
+                        'title': 'да',
+                        'hide': True
+                    },
+                    {
+                        'title': 'нет',
+                        'hide': True
+                    }
+                ]
+        else:
+            game(res, req)
+
+
+def game(res, req):
+    pass
 
 
 def get_first_name(req):
