@@ -3,7 +3,6 @@ import random
 from flask import Flask, request, jsonify
 import requests
 import logging
-import json
 from data import db_session
 from data.picture import Picture
 
@@ -23,8 +22,8 @@ for picture in db_sess.query(Picture).all():
     elif picture[5] == 2:
         pictures['2'][picture[1]] = [picture[3], picture[4]]
         pictures['2'][picture[1]]['key'] = [picture[2]]
-    elif picture[5] == 1:
-        pictures['3'][] = [picture[3], picture[4]]
+    elif picture[5] == 3:
+        pictures['3'][picture[1]] = [picture[3], picture[4]]
         pictures['3'][picture[1]]['key'] = [picture[2]]
 
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +49,6 @@ def main():
 def handle_dialog(res, req):
     global name_pict
     user_id = req['session']['user_id']
-
     if req['session']['new']:
         res['response']['text'] = 'Привет! Назови свое имя и кодовое слово!'
         sessionStorage[user_id] = {
@@ -62,14 +60,16 @@ def handle_dialog(res, req):
             'score': 0
         }
         return
-
     if sessionStorage[user_id]['first_name'] is None:
+        print('ok')
         key_word = None
-        if len(req.split()) == 2:
-            key_word = req.split()[1]
+        first_name = None
+        if len(req['request']['original_utterance'].split()) == 2:
+            key_word = req['request']['original_utterance'].split()[1]
             first_name = get_first_name(req)
         else:
             res['response']['text'] = 'Необходимо указать 2 слова'
+            return
 
         if first_name is None:
             res['response']['text'] = \
@@ -123,18 +123,20 @@ def handle_dialog(res, req):
                 sessionStorage[user_id]['objects'].append(name_pict)
                 sessionStorage[user_id]['score'] += 1
                 res['response']['text'] = 'Вы угадали! Хотите продолжить игру?'
-                if 'да' in req['request']['nlu']['tokens']:
-                    game(res, req)
-                else:
-                    res['response']['text'] = f'Хорошо, приятно было с вами сыграть. Ваш счёт ' \
-                                              f'{sessionStorage[user_id]["score"]}'
+                name_pict = None
+                return
             else:
                 res['response']['text'] = f'К сожалению, вы не угадали это {name_pict}. Хотите продолжить игру?'
-                if 'да' in req['request']['nlu']['tokens']:
-                    game(res, req)
-                else:
-                    res['response']['text'] = f'Хорошо, приятно было с вами сыграть. Ваш счёт ' \
-                                              f'{sessionStorage[user_id]["score"]}'
+                name_pict = None
+                sessionStorage[user_id]['objects'].append(name_pict)
+                return
+            if 'да' in req['request']['nlu']['tokens']:
+                game(res, req)
+                return
+            else:
+                res['response']['text'] = f'Хорошо, приятно было с вами сыграть. Ваш счёт ' \
+                                          f'{sessionStorage[user_id]["score"]}'
+                return
 
 
 def geocode(lat, long):
@@ -155,9 +157,33 @@ def geocode(lat, long):
 def game(res, req):
     global name_pict
     user_id = req['session']['user_id']
-    key_pict = random[pictures[sessionStorage[user_id]['level']]['key']]
+    if len(sessionStorage[user_id]['objects']) == len(pictures[sessionStorage[user_id]['level']]):
+        sessionStorage[user_id]['level'] += 1
+        sessionStorage[user_id]['objects'] = []
+        if sessionStorage[user_id]['level'] > len(pictures):
+            res['response'][
+                'text'] = f'Вы прошли игру, ваш счёт {sessionStorage[user_id]["score"]}.' \
+                          f' Хотите добавить свои данные к нам в базу?'
+            if 'да' in req['request']['nlu']['tokens']:
+                res['response']['text'] = 'Хорошо, вам нужно отправить название объекта, его долготу и широту'
+                if len(req['request']['original_utterance'].split()) == 3:
+                    name = req['request']['original_utterance'].split()[0]
+                    lat = req['request']['original_utterance'].split()[1]
+                    long = req['request']['original_utterance'].split()[3]
+                    picture.name = name
+                    picture.long = long
+                    picture.lat = lat
+                    db_sess.add(picture)
+                    geocode(lat, long)
+                else:
+                    res['response']['text'] = 'Необходимо указать 3 слова'
+                    return
+            else:
+                res['response']['text'] = f'Хорошо, приятно было с вами сыграть.'
+                return
+    key_pict = random.choice(pictures[sessionStorage[user_id]['level']]['key'])
     while name_pict in sessionStorage[user_id]['objects']:
-        key_pict = random[pictures[sessionStorage[user_id]['level']]['key']]
+        key_pict = random.choice(pictures[sessionStorage[user_id]['level']]['key'])
     name_pict = pictures['1'][picture[1]]['name']
     res['response']['card'] = {}
     res['response']['card']['type'] = 'BigImage'
